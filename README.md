@@ -16,13 +16,13 @@ The framework uses an effective mass approximation to model electron-hole excita
 
 The system is modeled using a simplified two-band Hamiltonian consisting of a parabolic valence band ($v$) and conduction band ($c$):
 
-$$E_c(k) = E_g + \frac{\hbar^2 k^2}{2 m_e^*}$$
+$$E_c(k) = E_g + \frac{\hbar^2 k^2}{2 m_c}$$
 
-$$E_v(k) = -\frac{\hbar^2 k^2}{2 m_h^*}$$
+$$E_v(k) = -\frac{\hbar^2 k^2}{2 m_v}$$
 
 Where:
 * $E_g$ is the direct energy band gap.
-* $m_e^*$ and $m_h^*$ are the effective masses of electrons and holes, respectively.
+* $m_c$ and $m_v$ are the effective masses of electrons and holes, respectively.
 * $k$ is the crystal momentum in $k$-space.
 
 The light-matter interaction is introduced via minimum coupling $\mathbf{p} \rightarrow \mathbf{p} - e\mathbf{A}(t)$ or dipole coupling $\mathbf{r} \cdot \mathbf{E}(t)$, where the time-dependent vector potential $\mathbf{A}(t)$ represents pump and probe laser pulses:
