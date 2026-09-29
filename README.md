@@ -86,7 +86,8 @@ tests/                pytest suite
 
 | Notebook | Purpose |
 |---|---|
-| `Analysis_of_TBModel.ipynb` | Band structure, equilibrium and transient conductivity, TAS map |
+| `Analysis_of_TBModel.ipynb` | Band structure, equilibrium and transient conductivity, TAS map | 
+| `equilibrium_spectrum_tbm.ipynb` | Equilibrium, single-delay and delay-scan analysis using the `twoband` package |
 | `FT_analysis_current.ipynb` | Conductivity and dielectric function from laser and current traces |
 | `Fourier_Analysis.ipynb` | sin^4 pulse construction and spectrum (direct FT vs FFT) |
 | `Im_3D_DEF.ipynb` | Analytic Im[eps(w)] for 3D parabolic bands |
@@ -100,6 +101,7 @@ Simulation output is not included in the repository because of its size. The not
 | `Act_jt_3.6d8_probe.out` | probe only (equilibrium reference) |
 | `Act_jt_3.6d10_pump.out` | pump only |
 | `Act_jt_3d10_3d8_pp.out` | pump-probe, one block of 50001 rows per delay |
+| `10_delays_3d10_3d8_absorption_spectra.dat` | pump-probe scan, 10 delays of 50001 rows each |
 
 Columns: 0 = time (a.u.), 1 = A(t), 4 = J(t), 7 = E(t).
 
