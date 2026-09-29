@@ -1,52 +1,128 @@
-# Parabolic Two-Band Model Calculation, Simulation and Analysis
+# Parabolic Two-Band Model: Optical Response Analysis
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/lawanmuk/hbn-parabolic-two-band-model/actions/workflows/ci.yml/badge.svg)](https://github.com/lawanmuk/hbn-parabolic-two-band-model/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 📌 Overview
+Analysis tools for the **parabolic two-band model** of a gapped semiconductor (such as monolayer hBN) driven by pump and probe laser pulses. The `twoband` package turns simulated current and field traces into optical conductivity, dielectric functions and transient absorption spectra (TAS), used to study the Dynamical Franz-Keldysh Effect (DFKE).
 
-This repository contains numerical tools and Python simulations for a **parabolic two-band model** in condensed matter physics. The code simulates quantum dynamics, non-equilibrium carrier distributions, and time-dependent current responses in semiconductor systems subjected to external optical fields (e.g., pump-probe laser pulses).
+## Overview
 
-The framework uses an effective mass approximation to model electron-hole excitations across a direct band gap, providing insights into time-resolved optical observables such as transient absorption and probe-induced currents to evaluate the optical conductivity.
+The time propagation of the two-band model runs in a separate Fortran code. It writes the vector potential A(t), current J(t) and electric field E(t) for three kinds of runs: probe only, pump only, and pump-probe at a series of delays. This repository contains:
 
----
+- **`twoband`**, a tested Python package with the analysis steps (damped Fourier transform, conductivity, reference subtraction, delay splitting, TAS)
+- **Jupyter notebooks** that apply the package to simulation output and produce the figures
 
-## 🔬 Theoretical Background
+## Theoretical background
 
-The system is modeled using a simplified two-band Hamiltonian consisting of a parabolic valence band ($v$) and conduction band ($c$):
+Parabolic valence and conduction bands (atomic units, $\hbar = e = m_e = 1$):
 
-$$E_c(k) = E_g + \frac{\hbar^2 k^2}{2 m_c}$$
+$$\epsilon_v(k) = -\frac{k^2}{2 m_v}, \qquad \epsilon_c(k) = \epsilon_g + \frac{k^2}{2 m_c}$$
 
-$$E_v(k) = -\frac{\hbar^2 k^2}{2 m_v}$$
+The optical conductivity follows from the damped Fourier transforms of current and field:
 
-Where:
-* $E_g$ is the direct energy band gap.
-* $m_c$ and $m_v$ are the effective masses of electrons and holes, respectively.
-* $k$ is the crystal momentum in $k$-space.
+$$\sigma(\omega) = \frac{J(\omega)}{E(\omega)}, \qquad F(\omega) = \int F(t)\, e^{i\omega t - \gamma t}\, dt$$
 
-The light-matter interaction is introduced via minimum coupling $\mathbf{p} \rightarrow \mathbf{p} - e\mathbf{A}(t)$ or dipole coupling $\mathbf{r} \cdot \mathbf{E}(t)$, where the time-dependent vector potential $\mathbf{A}(t)$ represents pump and probe laser pulses:
+In a pump-probe run, the probe response is isolated by subtracting the pump-only run,
 
-$$\mathbf{A}(t) = \mathbf{A}_{\text{pump}}(t) + \mathbf{A}_{\text{probe}}(t - \tau)$$
+$$J_{\text{probe}}(t) = J_{\text{pump-probe}}(t) - J_{\text{pump}}(t),$$
 
-The time evolution of the system is evaluated numerically to calculate the time-dependent current density $\mathbf{J}(t)$ and microscopic polarization.
+and the transient absorption at delay $T$ is
 
----
+$$\Delta\sigma(\omega, T) = \sigma(\omega, T) - \sigma(\omega).$$
 
-## 🚀 Key Features
+The dielectric function is related by $\epsilon(\omega) = 1 + 4\pi i\,\sigma(\omega)/\omega$. Analytic reference results for $\mathrm{Im}\,\epsilon(\omega)$ are included for 2D (a step at the gap) and 3D (a square-root edge).
 
-* **$k$-Space Band Dispersions:** Calculation of 1D/2D parabolic band structures and density of states (DOS).
-* **Time-Dependent Field Coupling:** Custom pulse configurations (envelope, frequency, polarization, and pump-probe delay $\tau$).
-* **Quantum Dynamics Integrator:** Solves the time-dependent Schrödinger equation (TDSE) or Semiconductor Bloch Equations (SBE).
-* **Observables Output:** Computes time-resolved photocurrents, interband/intraband polarization, and transient absorption spectra.
+## Installation
 
----
-
-## 🛠️ Installation & Prerequisites
-
-### Dependencies
-
-Ensure you have the following packages installed:
+Requires Python 3.10 or newer.
 
 ```bash
-pip install numpy scipy matplotlib 
+git clone https://github.com/lawanmuk/hbn-parabolic-two-band-model.git
+cd hbn-parabolic-two-band-model
+pip install -e .
+```
+
+For development (tests and linting): `pip install -e ".[dev]"`
+For the notebooks: `pip install -e ".[notebooks]"`
+
+## Usage
+
+```python
+import numpy as np
+import twoband as tb
+
+# Load simulation output: columns 0 = time, 1 = A(t), 4 = J(t), 7 = E(t)
+probe = np.loadtxt("data/Act_jt_3.6d8_probe.out")
+pump = np.loadtxt("data/Act_jt_3.6d10_pump.out")
+scan = np.loadtxt("data/Act_jt_3d10_3d8_pp.out")
+
+energy = np.linspace(2, 20, 500) / tb.HARTREE_TO_EV
+gamma = 0.25 / tb.HARTREE_TO_EV
+
+# Equilibrium conductivity
+sigma_eq = tb.optical_conductivity(probe[:, 0], probe[:, 4], probe[:, 7], energy, gamma)
+
+# Transient absorption over all delays
+blocks = tb.split_delays(scan, 50001)
+j_probe = tb.subtract_reference(blocks[:, :, 4], pump[:, 4])
+e_probe = tb.subtract_reference(blocks[:, :, 7], pump[:, 7])
+sigma_t = tb.optical_conductivity(blocks[0, :, 0], j_probe, e_probe, energy, gamma)
+tas = tb.transient_absorption(sigma_t, sigma_eq)   # shape (n_delays, n_energy)
+```
+
+## Project structure
+
+```
+src/twoband/
+    constants.py      unit conversions (Hartree to eV, a.u. to fs)
+    bands.py          parabolic dispersions and reduced mass
+    fourier.py        damped Fourier transform (1D or many traces at once)
+    conductivity.py   sigma(w), delay splitting, reference subtraction, TAS
+    dielectric.py     Im[eps(w)] for 2D and 3D parabolic bands
+tests/                pytest suite
+*.ipynb               analysis notebooks
+```
+
+| Notebook | Purpose |
+|---|---|
+| `Analysis_of_TBModel.ipynb` | Band structure, equilibrium and transient conductivity, TAS map |
+| `FT_analysis_current.ipynb` | Conductivity and dielectric function from laser and current traces |
+| `Fourier_Analysis.ipynb` | sin^4 pulse construction and spectrum (direct FT vs FFT) |
+| `Im_3D_DEF.ipynb` | Analytic Im[eps(w)] for 3D parabolic bands |
+
+## Data
+
+Simulation output is not included in the repository because of its size. The notebooks expect these files in a `data/` folder:
+
+| File | Content |
+|---|---|
+| `Act_jt_3.6d8_probe.out` | probe only (equilibrium reference) |
+| `Act_jt_3.6d10_pump.out` | pump only |
+| `Act_jt_3d10_3d8_pp.out` | pump-probe, one block of 50001 rows per delay |
+
+Columns: 0 = time (a.u.), 1 = A(t), 4 = J(t), 7 = E(t).
+
+The package itself does not need these files; the tests use synthetic signals.
+
+## Testing
+
+```bash
+pytest            # run the test suite
+ruff check .      # lint
+ruff format .     # format
+```
+
+CI runs linting, the tests on Python 3.10 to 3.13, and a dependency audit on every push and pull request.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Reference
+
+S. A. Sato et al., "Nonlinear optical responses of solids: first-principles simulations and the dynamical Franz-Keldysh effect", *Applied Sciences* 8(10), 1777 (2018). https://www.mdpi.com/2076-3417/8/10/1777
+
+## License
+
+MIT, see [LICENSE](LICENSE).
