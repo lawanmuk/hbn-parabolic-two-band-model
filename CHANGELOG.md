@@ -20,9 +20,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - 3D dielectric function used (2m)^3/2 instead of (2m)^(3/2).
 - Fourier transform modified the input signal in place.
 
-  ### Added
-   - `equilibrium_spectrum_tbm.ipynb`: equilibrium, single-delay and delay-scan TAS analysis built on the `twoband` package.
+### Added
+- `equilibrium_spectrum_tbm.ipynb`: equilibrium, single-delay and delay-scan TAS analysis built on the `twoband` package.
 
-   ### Fixed
-   - Single-delay Fourier transform used the equilibrium time and energy arrays instead of the pump-probe ones.
-   - Equilibrium and transient spectra were computed on different energy grids before being subtracted.
+### Fixed
+- Single-delay Fourier transform used the equilibrium time and energy arrays instead of the pump-probe ones.
+- Equilibrium and transient spectra were computed on different energy grids before being subtracted.
