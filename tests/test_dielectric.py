@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from twoband import HARTREE_TO_EV, im_eps_2d, im_eps_3d
+from twoband import HARTREE_TO_EV, im_eps_1d, im_eps_2d, im_eps_3d, re_sigma_1d_broadened
 
 GAP = 4.45 / HARTREE_TO_EV
 
@@ -44,3 +44,25 @@ def test_3d_uses_three_halves_power():
     omega = np.array([GAP + 0.01])
     ratio = im_eps_3d(omega, GAP, 0.2, 1.0) / im_eps_3d(omega, GAP, 0.1, 1.0)
     assert ratio[0] == pytest.approx(2**1.5)
+
+
+def test_1d_inverse_square_root_edge():
+    d1, d2 = 1e-4, 4e-4
+    omega = np.array([GAP + d1, GAP + d2])
+    scaled = im_eps_1d(omega, GAP, 0.1875, 0.96) * omega**2
+    assert scaled[0] / scaled[1] == pytest.approx(2.0, rel=1e-6)
+    assert im_eps_1d(np.array([GAP * 0.9]), GAP, 0.1875, 0.96)[0] == 0.0
+
+
+def test_broadened_1d_matches_direct_integration_away_from_edge():
+    # Far above the gap the Lorentzian barely reaches the singular edge, so a plain
+    # fine-grid integral must agree with the substitution used in re_sigma_1d_broadened.
+    gamma = 0.1 / HARTREE_TO_EV
+    energy = np.array([8.0, 12.0]) / HARTREE_TO_EV
+    grid = np.linspace(GAP + 1e-3, GAP + 2.0, 400000)
+    re_sigma = grid * im_eps_1d(grid, GAP, 0.1875, 0.96) / (4 * np.pi)
+    lorentz = (gamma / np.pi) / ((grid[None, :] - energy[:, None]) ** 2 + gamma**2)
+    direct = np.trapezoid(re_sigma[None, :] * lorentz, grid, axis=1)
+    np.testing.assert_allclose(
+        re_sigma_1d_broadened(energy, GAP, 0.1875, 0.96, gamma), direct, rtol=5e-3
+    )

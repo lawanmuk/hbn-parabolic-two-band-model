@@ -3,7 +3,20 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+
+
 ## [Unreleased]
+
+## [0.2.0] - 2026-09-29
+
+### Added
+- Real-time simulator of the 1D parabolic two-band model (`twoband.simulate`) with f-sum-rule diamagnetic correction.
+- sin^4 pulses and intensity conversion (`twoband.pulses`).
+- Dataset generator with metadata and the `twoband-generate` command (`twoband.dataset`); notebooks generate data on first run.
+- `im_eps_1d` and `re_sigma_1d_broadened` analytic references; tests validating the simulator against them.
+
+### Changed
+- Notebooks use generated data and plot Re[sigma] with the physical sign.
 
 ## [0.1.0] - 2026-09-29
 
