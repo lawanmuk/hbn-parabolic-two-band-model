@@ -26,3 +26,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Single-delay Fourier transform used the equilibrium time and energy arrays instead of the pump-probe ones.
 - Equilibrium and transient spectra were computed on different energy grids before being subtracted.
+
+### Changed
+- Replaced the five original notebooks with four notebooks built on the `twoband` package: `band_structure_and_dielectric`, `pulse_spectrum`, `equilibrium_spectrum_tbm` and `conductivity_from_current`.
+- The single-delay analysis detects how many delays the pump-probe file holds.
+
+### Removed
+- `Copy_of_Analysis_of_TBModel.ipynb` and the anonfiles.com downloads, which no longer work.
