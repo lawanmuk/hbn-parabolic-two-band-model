@@ -27,6 +27,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Im[eps(w)] for 2D (Lorentzian-broadened k integral) and 3D parabolic bands.
 - pytest suite, ruff linting, GitHub Actions CI on Python 3.10 to 3.13, pip-audit and Dependabot.
 
+- Pinned `requirements.txt` (generated with `uv pip compile --universal`) for reproducible installs on Python 3.10 and newer.
+
 
 ### Fixed
 - Band dispersion multiplied by the effective mass instead of dividing by it.
