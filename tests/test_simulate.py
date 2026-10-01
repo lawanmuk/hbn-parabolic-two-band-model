@@ -75,3 +75,47 @@ def test_invalid_model_parameters():
 def test_length_mismatch_raises(model):
     with pytest.raises(ValueError, match="different lengths"):
         tb.propagate(model, np.arange(10.0), np.zeros(9))
+
+
+def _reference_propagate(model, time, a):
+    """Straightforward complex-valued propagator, including the global phase."""
+    dt = time[1] - time[0]
+    k = model.k
+    dk = k[1] - k[0]
+    c_v = np.ones(k.size, dtype=complex)
+    c_c = np.zeros(k.size, dtype=complex)
+    current = np.zeros(time.size)
+    for n in range(time.size - 1):
+        a_mid = 0.5 * (a[n] + a[n + 1]) / tb.C_AU
+        kk = k + a_mid
+        e_v = -(kk**2) / (2 * model.m_v)
+        e_c = model.e_gap + kk**2 / (2 * model.m_c)
+        h0, hz, hx = 0.5 * (e_v + e_c), 0.5 * (e_v - e_c), a_mid * model.p_vc
+        w = np.sqrt(hz**2 + hx**2)
+        cos, sin_over, phase = np.cos(w * dt), np.sin(w * dt) / w, np.exp(-1j * h0 * dt)
+        c_v, c_c = (
+            phase * ((cos - 1j * sin_over * hz) * c_v - 1j * sin_over * hx * c_c),
+            phase * (-1j * sin_over * hx * c_v + (cos + 1j * sin_over * hz) * c_c),
+        )
+        kk = k + a[n + 1] / tb.C_AU
+        current[n + 1] = (
+            -2
+            * dk
+            / (2 * np.pi)
+            * np.sum(
+                np.abs(c_c) ** 2 * (kk / model.m_c + kk / model.m_v)
+                + 2 * np.real(np.conj(c_v) * c_c) * model.p_vc
+            )
+        )
+    return current - tb.diamagnetic_coefficient(model) * a / tb.C_AU
+
+
+def test_fast_propagator_matches_reference_in_strong_field(model):
+    # Strong enough to excite real carriers, so populations, coherences and the
+    # intraband current all matter. The global phase dropped by the fast loop must not.
+    time = np.arange(0.0, 300.0, 0.05)
+    field = tb.sin4_field(time, amplitude=5e-3, omega=0.057, duration=250.0, center=150.0)
+    a = tb.vector_potential(time, field)
+    fast = tb.propagate(model, time, a)
+    reference = _reference_propagate(model, time, a)
+    np.testing.assert_allclose(fast, reference, rtol=0, atol=1e-10 * np.abs(reference).max())

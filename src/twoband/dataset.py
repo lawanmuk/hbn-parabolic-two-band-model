@@ -111,18 +111,16 @@ def generate_dataset(out_dir, config: DatasetConfig | None = None, verbose: bool
     a_pump = vector_potential(time, config.pump_field(time))
     a_probe = vector_potential(time, config.probe_field(time, config.single_delay_fs))
 
-    log("probe only ...")
-    runs = propagate(model, time, np.vstack([a_probe, a_pump, a_pump + a_probe]))
-    np.savetxt(out_dir / FILES["probe"], _trace(time, a_probe, runs[0]))
-    np.savetxt(out_dir / FILES["pump"], _trace(time, a_pump, runs[1]))
-    np.savetxt(out_dir / FILES["pump_probe"], _trace(time, a_pump + a_probe, runs[2]))
-
-    log(f"delay scan ({len(config.delays_fs)} delays) ...")
     a_scan = np.vstack(
         [a_pump + vector_potential(time, config.probe_field(time, d)) for d in config.delays_fs]
     )
-    j_scan = propagate(model, time, a_scan)
-    blocks = [_trace(time, a_scan[i], j_scan[i]) for i in range(len(config.delays_fs))]
+    n_delays = len(config.delays_fs)
+    log(f"propagating probe, pump, pump-probe and {n_delays} delays in one pass ...")
+    runs = propagate(model, time, np.vstack([a_probe, a_pump, a_pump + a_probe, a_scan]))
+    np.savetxt(out_dir / FILES["probe"], _trace(time, a_probe, runs[0]))
+    np.savetxt(out_dir / FILES["pump"], _trace(time, a_pump, runs[1]))
+    np.savetxt(out_dir / FILES["pump_probe"], _trace(time, a_pump + a_probe, runs[2]))
+    blocks = [_trace(time, a_scan[i], runs[3 + i]) for i in range(n_delays)]
     np.savetxt(out_dir / FILES["delay_scan"], np.vstack(blocks))
 
     metadata = {

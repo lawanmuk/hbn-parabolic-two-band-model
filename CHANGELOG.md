@@ -1,11 +1,18 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-
-
 ## [Unreleased]
+
+## [0.2.1] - 2026-10-01
+
+### Added
+- Pinned `requirements.txt` (generated with `uv pip compile --universal`) for reproducible installs on Python 3.10 and newer.
+- Regression test comparing the fast propagator with a straightforward reference implementation.
+
+### Changed
+- Propagator about 2.4x faster: the global phase, which cancels in every observable, is no longer computed, amplitudes are updated in place as real arrays, and the generator runs all 15 simulations in one pass. Results are unchanged to machine precision.
 
 ## [0.2.0] - 2026-09-29
 
@@ -26,9 +33,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Optical conductivity, delay splitting, pump reference subtraction and transient absorption functions with input checks.
 - Im[eps(w)] for 2D (Lorentzian-broadened k integral) and 3D parabolic bands.
 - pytest suite, ruff linting, GitHub Actions CI on Python 3.10 to 3.13, pip-audit and Dependabot.
-
-- Pinned `requirements.txt` (generated with `uv pip compile --universal`) for reproducible installs on Python 3.10 and newer.
-
 
 ### Fixed
 - Band dispersion multiplied by the effective mass instead of dividing by it.
