@@ -74,31 +74,69 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
     dk = k[0, 1] - k[0, 0]
     weight = -2.0 * dk / (2.0 * np.pi)
     n_runs = a_all.shape[0]
+    inv_2mr = 0.5 * (1.0 / model.m_c + 1.0 / model.m_v)  # 1 / (2 m_r)
+    inv_mr = 2.0 * inv_2mr
+    a_mid_all = 0.5 * (a_all[:, :-1] + a_all[:, 1:]) / C_AU
+    a_next_all = a_all[:, 1:] / C_AU
 
-    c_v = np.ones((n_runs, model.n_k), dtype=complex)
-    c_c = np.zeros((n_runs, model.n_k), dtype=complex)
+    # Amplitudes c_v = vr + i vi and c_c = cr + i ci, kept as real arrays and updated in place.
+    shape = (n_runs, model.n_k)
+    vr, vi = np.ones(shape), np.zeros(shape)
+    cr, ci = np.zeros(shape), np.zeros(shape)
     current = np.zeros((n_runs, time.size))
 
-    for n in range(time.size - 1):
-        a_mid = 0.5 * (a_all[:, n] + a_all[:, n + 1])[:, None] / C_AU
-        kk = k + a_mid
-        e_v = -(kk**2) / (2.0 * model.m_v)
-        e_c = model.e_gap + kk**2 / (2.0 * model.m_c)
-        h0 = 0.5 * (e_v + e_c)
-        hz = 0.5 * (e_v - e_c)
-        hx = a_mid * model.p_vc
-        omega = np.sqrt(hz**2 + hx**2)
-        cos = np.cos(omega * dt)
-        sin_over = np.sin(omega * dt) / omega
-        phase = np.exp(-1j * h0 * dt)
-        new_v = phase * ((cos - 1j * sin_over * hz) * c_v - 1j * sin_over * hx * c_c)
-        new_c = phase * (-1j * sin_over * hx * c_v + (cos + 1j * sin_over * hz) * c_c)
-        c_v, c_c = new_v, new_c
+    # Work buffers, reused at every step to avoid allocating temporaries.
+    kk, hz, omega, cos, sin_over, b, c = (np.empty(shape) for _ in range(7))
+    t1, t2, t3, t4 = (np.empty(shape) for _ in range(4))
 
-        kk = k + a_all[:, n + 1][:, None] / C_AU
-        v_diff = kk / model.m_c + kk / model.m_v
-        current[:, n + 1] = weight * np.sum(
-            np.abs(c_c) ** 2 * v_diff + 2.0 * np.real(np.conj(c_v) * c_c) * model.p_vc, axis=1
+    # The common phase exp(-i (eps_v + eps_c) dt / 2) multiplies both amplitudes equally and
+    # cancels in every observable (|c_c|^2 and Re(c_v* c_c)), so it is left out. What remains
+    # is the exact SU(2) step
+    #   c_v' = cos c_v - i (b c_v + c c_c),   c_c' = cos c_c + i (b c_c - c c_v),
+    # with b = sin(w dt) hz / w, c = sin(w dt) hx / w and w = sqrt(hz^2 + hx^2).
+    for n in range(time.size - 1):
+        a_mid = a_mid_all[:, n : n + 1]
+        hx = a_mid * model.p_vc  # (n_runs, 1): interband coupling
+        np.add(k, a_mid, out=kk)
+        np.multiply(kk, kk, out=hz)
+        hz *= -0.5 * inv_2mr
+        hz -= 0.5 * model.e_gap  # hz = (eps_v - eps_c) / 2
+        np.multiply(hz, hz, out=omega)
+        omega += hx * hx
+        np.sqrt(omega, out=omega)
+        np.multiply(omega, dt, out=t1)
+        np.cos(t1, out=cos)
+        np.sin(t1, out=sin_over)
+        sin_over /= omega
+        np.multiply(sin_over, hz, out=b)
+        np.multiply(sin_over, hx, out=c)
+
+        # y = b c_v + c c_c  ->  c_v' = cos c_v + Im(y) - i Re(y)
+        np.multiply(b, vr, out=t1)
+        t1 += c * cr  # Re(y)
+        np.multiply(b, vi, out=t2)
+        t2 += c * ci  # Im(y)
+        # x = b c_c - c c_v  ->  c_c' = cos c_c - Im(x) + i Re(x)
+        np.multiply(b, cr, out=t3)
+        t3 -= c * vr  # Re(x)
+        np.multiply(b, ci, out=t4)
+        t4 -= c * vi  # Im(x)
+        vr *= cos
+        vr += t2
+        vi *= cos
+        vi -= t1
+        cr *= cos
+        cr -= t4
+        ci *= cos
+        ci += t3
+
+        np.add(k, a_next_all[:, n : n + 1], out=kk)
+        np.multiply(cr, cr, out=t1)
+        t1 += ci * ci  # |c_c|^2
+        np.multiply(vr, cr, out=t2)
+        t2 += vi * ci  # Re(c_v* c_c)
+        current[:, n + 1] = weight * (
+            np.einsum("ij,ij->i", t1, kk) * inv_mr + 2.0 * model.p_vc * t2.sum(axis=1)
         )
 
     current -= diamagnetic_coefficient(model) * a_all / C_AU
