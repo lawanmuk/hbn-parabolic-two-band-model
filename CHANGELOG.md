@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- 2D propagation is about 1.8x faster on a 101 x 101 grid (9.2 s to 5.2 s for 16000 steps). The field and dipole are along x, so ky and -ky points are identical: only ky >= 0 is propagated, with each ky > 0 point counted twice. Results are unchanged to 1e-15 relative.
+
 ### Added
 - Check of the 2D simulator against the analytic `im_eps_2d`: the weak-probe Re[sigma] agrees to 3 % from 6 to 12 eV, with the Lorentzian broadening equal to the damping.
 - Two-dimensional k grid in the simulator: `TwoBandModel` takes `ky_max` and `n_ky`, with the field and the dipole along x. The default `n_ky = 1` keeps the one-dimensional model unchanged. `TwoBandModel.grid()` gives the flattened points and the area element, and the diamagnetic coefficient uses the same grid.
