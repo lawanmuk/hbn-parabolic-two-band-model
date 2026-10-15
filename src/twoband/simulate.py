@@ -32,7 +32,13 @@ from twoband.constants import C_AU
 
 @dataclass(frozen=True)
 class TwoBandModel:
-    """Parameters of the parabolic two-band model (atomic units)."""
+    """Parameters of the parabolic two-band model (atomic units).
+
+    With the default ``n_ky = 1`` the model is one-dimensional. With ``n_ky > 1`` the k grid
+    gets a second direction, ky, perpendicular to the field. The field and the dipole stay
+    along x, so ky does not couple to the vector potential: it only adds ky^2 to the band
+    energies and to the k-space area element.
+    """
 
     e_gap: float
     m_c: float
@@ -40,6 +46,8 @@ class TwoBandModel:
     p_vc: float
     k_max: float = 0.8
     n_k: int = 3201
+    ky_max: float = 0.0
+    n_ky: int = 1
 
     def __post_init__(self):
         if self.m_c <= 0 or self.m_v <= 0:
@@ -48,10 +56,38 @@ class TwoBandModel:
             raise ValueError("e_gap must be positive")
         if self.n_k < 3:
             raise ValueError("n_k must be at least 3")
+        if self.n_ky < 1:
+            raise ValueError("n_ky must be at least 1")
+        if self.n_ky > 1 and (self.n_ky < 3 or self.ky_max <= 0):
+            raise ValueError("a ky grid needs n_ky >= 3 and ky_max > 0")
 
     @property
     def k(self) -> np.ndarray:
+        """The kx grid (the field direction)."""
         return np.linspace(-self.k_max, self.k_max, self.n_k)
+
+    @property
+    def ky(self) -> np.ndarray:
+        """The ky grid, or the single point ky = 0 in one dimension."""
+        if self.n_ky == 1:
+            return np.zeros(1)
+        return np.linspace(-self.ky_max, self.ky_max, self.n_ky)
+
+    def grid(self) -> tuple[np.ndarray, np.ndarray, float]:
+        """Flattened k points as ``(kx, ky^2, measure)``.
+
+        ``measure`` is the k-space area element per point divided by (2 pi)^d, with d the
+        dimension, so that a sum over the points times 2 gives the spin-summed integral.
+        """
+        kx = self.k
+        ky = self.ky
+        dk = kx[1] - kx[0]
+        if self.n_ky == 1:
+            return kx.copy(), np.zeros(kx.size), dk / (2.0 * np.pi)
+        dky = ky[1] - ky[0]
+        kxg, kyg = np.meshgrid(kx, ky, indexing="ij")
+        measure = dk * dky / (2.0 * np.pi) ** 2
+        return kxg.ravel(), (kyg**2).ravel(), measure
 
 
 def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarray) -> np.ndarray:
@@ -70,17 +106,18 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
     a_all = np.atleast_2d(a_all)
     dt = time[1] - time[0]
 
-    k = model.k[None, :]
-    dk = k[0, 1] - k[0, 0]
-    weight = -2.0 * dk / (2.0 * np.pi)
+    kx, ky2, measure = model.grid()
+    k = kx[None, :]
+    weight = -2.0 * measure
     n_runs = a_all.shape[0]
     inv_2mr = 0.5 * (1.0 / model.m_c + 1.0 / model.m_v)  # 1 / (2 m_r)
     inv_mr = 2.0 * inv_2mr
+    ky_term = (-0.5 * inv_2mr * ky2)[None, :]  # the ky part of hz, independent of the field
     a_mid_all = 0.5 * (a_all[:, :-1] + a_all[:, 1:]) / C_AU
     a_next_all = a_all[:, 1:] / C_AU
 
     # Amplitudes c_v = vr + i vi and c_c = cr + i ci, kept as real arrays and updated in place.
-    shape = (n_runs, model.n_k)
+    shape = (n_runs, kx.size)
     vr, vi = np.ones(shape), np.zeros(shape)
     cr, ci = np.zeros(shape), np.zeros(shape)
     current = np.zeros((n_runs, time.size))
@@ -100,6 +137,7 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
         np.add(k, a_mid, out=kk)
         np.multiply(kk, kk, out=hz)
         hz *= -0.5 * inv_2mr
+        hz += ky_term
         hz -= 0.5 * model.e_gap  # hz = (eps_v - eps_c) / 2
         np.multiply(hz, hz, out=omega)
         omega += hx * hx
@@ -145,7 +183,7 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
 
 def diamagnetic_coefficient(model: TwoBandModel) -> float:
     """Sum-rule coefficient D of the diamagnetic current -D A/c (see module docstring)."""
-    k = model.k
-    dk = k[1] - k[0]
-    transition = model.e_gap + k**2 / (2.0 * model.m_c) + k**2 / (2.0 * model.m_v)
-    return float(2.0 * dk / (2.0 * np.pi) * np.sum(2.0 * model.p_vc**2 / transition))
+    kx, ky2, measure = model.grid()
+    inv_2mr = 0.5 * (1.0 / model.m_c + 1.0 / model.m_v)
+    transition = model.e_gap + kx**2 * inv_2mr + ky2 * inv_2mr
+    return float(2.0 * measure * np.sum(2.0 * model.p_vc**2 / transition))
