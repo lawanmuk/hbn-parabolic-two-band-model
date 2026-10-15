@@ -90,6 +90,33 @@ class TwoBandModel:
         return kxg.ravel(), (kyg**2).ravel(), measure
 
 
+def _propagation_points(model: TwoBandModel):
+    """Points that are actually propagated, with the multiplicity of each.
+
+    The field and the dipole are along x, so the ky and -ky points of the grid give identical
+    problems. Only ky >= 0 is propagated, and every point with ky > 0 counts twice. The
+    returned ``(kx, ky2, multiplicity, measure)`` sum to the same result as the full grid.
+    """
+    kx = model.k
+    if model.n_ky == 1:
+        return kx.copy(), np.zeros(kx.size), np.ones(kx.size), model.grid()[2]
+    ky = model.ky
+    n = ky.size
+    mirror = np.allclose(ky, -ky[::-1], rtol=0, atol=1e-12)
+    if not mirror:  # not a symmetric grid: propagate all points as they are
+        kxg, ky2, measure = model.grid()
+        return kxg, ky2, np.ones(kxg.size), measure
+    half = (n + 1) // 2
+    ky_half = ky[:half]
+    mult_half = np.where(np.arange(half) == n - 1 - np.arange(half), 1.0, 2.0)
+    kx_pts = np.tile(kx, half)
+    ky2_pts = np.repeat(ky_half**2, kx.size)
+    mult_pts = np.repeat(mult_half, kx.size)
+    dk = kx[1] - kx[0]
+    measure = dk * (ky[1] - ky[0]) / (2.0 * np.pi) ** 2
+    return kx_pts, ky2_pts, mult_pts, measure
+
+
 def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarray) -> np.ndarray:
     """Evolve the model under A(t) and return the current density J(t).
 
@@ -106,7 +133,7 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
     a_all = np.atleast_2d(a_all)
     dt = time[1] - time[0]
 
-    kx, ky2, measure = model.grid()
+    kx, ky2, mult, measure = _propagation_points(model)
     k = kx[None, :]
     weight = -2.0 * measure
     n_runs = a_all.shape[0]
@@ -174,7 +201,7 @@ def propagate(model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarra
         np.multiply(vr, cr, out=t2)
         t2 += vi * ci  # Re(c_v* c_c)
         current[:, n + 1] = weight * (
-            np.einsum("ij,ij->i", t1, kk) * inv_mr + 2.0 * model.p_vc * t2.sum(axis=1)
+            np.einsum("ij,ij,j->i", t1, kk, mult) * inv_mr + 2.0 * model.p_vc * (t2 @ mult)
         )
 
     current -= diamagnetic_coefficient(model) * a_all / C_AU

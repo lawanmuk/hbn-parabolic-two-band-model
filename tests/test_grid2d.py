@@ -126,3 +126,22 @@ def test_2d_absorption_matches_analytic_im_eps_2d():
     )
     expected = energy * tb.im_eps_2d(energy, GAP, m_r, p_vc, eta=gamma) / (4 * np.pi)
     np.testing.assert_allclose(sigma.real, expected, rtol=0.03)
+
+
+@pytest.mark.parametrize("n_ky", [5, 6])
+def test_reduced_points_reproduce_the_full_grid_sum(n_ky):
+    # Only ky >= 0 is propagated, with multiplicities. For any function of ky^2 the weighted
+    # sum over the reduced points must equal the sum over the full grid, odd or even n_ky.
+    from twoband.simulate import _propagation_points
+
+    model = tb.TwoBandModel(
+        e_gap=GAP, m_c=0.3, m_v=0.5, p_vc=0.96, k_max=0.5, n_k=21, ky_max=0.5, n_ky=n_ky
+    )
+    kx_full, ky2_full, measure_full = model.grid()
+    kx, ky2, mult, measure = _propagation_points(model)
+    assert measure == pytest.approx(measure_full)
+    assert kx.size == model.n_k * ((n_ky + 1) // 2)
+    for g in (lambda q: q, lambda q: np.exp(-q), lambda q: 1.0 / (1.0 + q)):
+        full = np.sum(g(ky2_full) * np.cos(kx_full))
+        reduced = np.sum(mult * g(ky2) * np.cos(kx))
+        assert reduced == pytest.approx(full, rel=1e-12)
