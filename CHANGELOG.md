@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Check of the 2D simulator against the analytic `im_eps_2d`: the weak-probe Re[sigma] agrees to 3 % from 6 to 12 eV, with the Lorentzian broadening equal to the damping.
 - Two-dimensional k grid in the simulator: `TwoBandModel` takes `ky_max` and `n_ky`, with the field and the dipole along x. The default `n_ky = 1` keeps the one-dimensional model unchanged. `TwoBandModel.grid()` gives the flattened points and the area element, and the diamagnetic coefficient uses the same grid.
 - Tests for the 2D grid: a complex-valued reference over the full (kx, ky) grid, weak-field linearity, and the static sum rule.
 
