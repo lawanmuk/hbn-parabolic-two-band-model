@@ -104,3 +104,25 @@ def test_2d_static_vector_potential_gives_no_lasting_current():
     ramp = 1e-4 * tb.C_AU * s**2 * (3 - 2 * s)
     current = tb.propagate(model, time, ramp)
     assert abs(current[-1]) < 1e-3 * tb.diamagnetic_coefficient(model) * 1e-4
+
+
+def test_2d_absorption_matches_analytic_im_eps_2d():
+    # Weak-probe Re[sigma] of the 2D simulator against omega Im[eps_2d] / (4 pi), with the
+    # analytic Lorentzian broadening set equal to the damping of the Fourier transform.
+    # Above the gap the step is reproduced to a few per cent on this grid.
+    m_c, m_v, p_vc = 0.3, 0.5, 0.96
+    m_r = tb.reduced_mass(m_c, m_v)
+    gamma = 0.5 / tb.HARTREE_TO_EV
+    model = tb.TwoBandModel(
+        e_gap=GAP, m_c=m_c, m_v=m_v, p_vc=p_vc, k_max=0.5, n_k=101, ky_max=0.5, n_ky=101
+    )
+    time = np.arange(0.0, 800.0, 0.05)
+    field = tb.sin4_field(time, amplitude=1e-5, omega=0.4, duration=40.0, center=200.0)
+    a = tb.vector_potential(time, field)
+    current = tb.propagate(model, time, a)
+    energy = np.array([6.0, 7.0, 8.0, 10.0, 12.0]) / tb.HARTREE_TO_EV
+    sigma = tb.optical_conductivity(
+        time, current, tb.field_from_vector_potential(time, a), energy, gamma
+    )
+    expected = energy * tb.im_eps_2d(energy, GAP, m_r, p_vc, eta=gamma) / (4 * np.pi)
+    np.testing.assert_allclose(sigma.real, expected, rtol=0.03)
