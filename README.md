@@ -34,7 +34,7 @@ and the transient absorption at delay $T$ is
 
 $$\Delta\sigma(\omega, T) = \sigma(\omega, T) - \sigma(\omega).$$
 
-The dielectric function is related by $\epsilon(\omega) = 1 + 4\pi i\,\sigma(\omega)/\omega$. Analytic reference results for $\mathrm{Im}\,\epsilon(\omega)$ are included for 2D (a step at the gap) and 3D (a square-root edge).
+The dielectric function is related by $\epsilon(\omega) = 1 + 4\pi i\ \sigma(\omega)/\omega$. Analytic reference results for $\mathrm{Im}\,\epsilon(\omega)$ are included for 2D (a step at the gap) and 3D (a square-root edge).
 
 ## Installation
 
