@@ -11,7 +11,7 @@ Analysis tools for the **parabolic two-band model** of a gapped semiconductor (s
 The time propagation of the two-band model runs in a separate Fortran code. It writes the vector potential A(t), current J(t) and electric field E(t) for three kinds of runs: probe only, pump only, and pump-probe at a series of delays. This repository contains:
 
 - **`twoband`**, a tested Python package with
-  - a real-time simulator of the 1D parabolic two-band model (velocity gauge, exact 2x2 propagation per k point, f-sum-rule diamagnetic term)
+  - a real-time simulator of the parabolic two-band model in 1D, or in 2D with a ky grid perpendicular to the field (velocity gauge, exact 2x2 propagation per k point, f-sum-rule diamagnetic term)
   - the analysis steps: damped Fourier transform, conductivity, reference subtraction, delay splitting, transient absorption
   - analytic Im[eps(w)] for 1D, 2D and 3D parabolic bands, used to validate the simulator
 - **Jupyter notebooks** that generate data with the simulator and produce the figures
