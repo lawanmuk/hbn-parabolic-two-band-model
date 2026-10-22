@@ -1,0 +1,220 @@
+From 225f5877eea04b758d1a29827ea2b7ba103c29ea Mon Sep 17 00:00:00 2001
+From: Mukhtar Lawan <mukhtarlawanphy@gmail.com>
+Date: Sat, 17 Oct 2026 15:38:12 +0000
+Subject: [PATCH] Add density-matrix propagation with dephasing
+
+Each k point carries a 2x2 density matrix. The coherent step is the same SU(2) update as the pure-state propagator, and the coherences decay as exp(-t / T2) with a symmetric split. With T2 = infinity the current matches the pure-state result to 1e-13. Tests check the trace, positivity, the exact free decay of the coherence, time-step convergence and input validation.
+
+
+---
+ CHANGELOG.md            |  3 ++
+ src/twoband/__init__.py |  2 +
+ src/twoband/density.py  | 92 +++++++++++++++++++++++++++++++++++++++++
+ tests/test_density.py   | 62 +++++++++++++++++++++++++++
+ 4 files changed, 159 insertions(+)
+ create mode 100644 src/twoband/density.py
+ create mode 100644 tests/test_density.py
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 51ecb26..5b9e67c 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+ 
+ ## [Unreleased]
+ 
++### Added
++- Density-matrix propagation with dephasing (`twoband.density`, `propagate_dephased`): each k point carries a 2x2 density matrix, and the coherences decay as exp(-t / T2). With T2 = infinity the result equals the pure-state propagator to 1e-13. Tests check the trace, positivity, the exact free decay of the coherence, time-step convergence and input validation.
++
+ ## [0.3.0] - 2026-10-15
+ 
+ ### Added
+diff --git a/src/twoband/__init__.py b/src/twoband/__init__.py
+index 3a9c575..4eec791 100644
+--- a/src/twoband/__init__.py
++++ b/src/twoband/__init__.py
+@@ -12,6 +12,7 @@ from twoband.conductivity import (
+ )
+ from twoband.constants import AU_TO_FS, C_AU, HARTREE_TO_EV
+ from twoband.dataset import DatasetConfig, generate_dataset, load_or_generate
++from twoband.density import propagate_dephased
+ from twoband.dielectric import im_eps_1d, im_eps_2d, im_eps_3d, re_sigma_1d_broadened
+ from twoband.fourier import damped_ft
+ from twoband.pulses import (
+@@ -29,6 +30,7 @@ __all__ = [
+     "DatasetConfig",
+     "TwoBandModel",
+     "conduction_band",
++    "propagate_dephased",
+     "damped_ft",
+     "diamagnetic_coefficient",
+     "field_from_vector_potential",
+diff --git a/src/twoband/density.py b/src/twoband/density.py
+new file mode 100644
+index 0000000..42be6cd
+--- /dev/null
++++ b/src/twoband/density.py
+@@ -0,0 +1,92 @@
++"""Density-matrix propagation of the two-band model with dephasing.
++
++Each k point carries a 2x2 density matrix rho, with rho = c c^dagger for the pure state
++(c_v, c_c) of the simulator. The coherent part of the evolution is the same SU(2) step,
++U = [[alpha, beta], [-beta*, alpha*]], applied as rho -> U rho U^dagger. Dephasing with time
++T2 multiplies the off-diagonal elements by exp(-t / T2). The populations are untouched, so
++there is no relaxation to the valence band, only loss of coherence.
++
++The step is split symmetrically: half the decay, the unitary step, then half the decay. This
++second-order splitting is exact for the decay alone, and with T2 -> infinity it reduces to
++the pure-state propagator.
++
++The current is the same expression as in ``twoband.simulate``, written in terms of rho:
++    J = -2 * sum_k w_k [ rho_cc (v_c - v_v) + 2 p_vc Re(rho_cv) ] - D A / c.
++"""
++
++import numpy as np
++
++from twoband.constants import C_AU
++from twoband.simulate import TwoBandModel, _propagation_points, diamagnetic_coefficient
++
++
++def _evolve(model, time, vector_potential, t2, rho0=None):
++    """Evolve the density matrices. Returns ``(current, rho)`` with rho of shape (n_pts, 2, 2)."""
++    time = np.asarray(time, dtype=float)
++    a = np.asarray(vector_potential, dtype=float)
++    if time.ndim != 1 or time.size < 2:
++        raise ValueError("time must be 1D with at least two points")
++    if a.shape != time.shape:
++        raise ValueError("vector_potential and time have different lengths")
++    if t2 <= 0:
++        raise ValueError("t2 must be positive")
++    dt = time[1] - time[0]
++    decay_half = np.exp(-0.5 * dt / t2)  # 0 < t2 <= inf; for t2 = inf this is exactly 1
++
++    kx, ky2, mult, measure = _propagation_points(model)
++    n_pts = kx.size
++    inv_2mr = 0.5 * (1.0 / model.m_c + 1.0 / model.m_v)
++    inv_mr = 2.0 * inv_2mr
++    ky_term = -0.5 * inv_2mr * ky2
++    a_mid = 0.5 * (a[:-1] + a[1:]) / C_AU
++    a_next = a[1:] / C_AU
++    weight = -2.0 * measure
++
++    if rho0 is None:
++        rho = np.zeros((n_pts, 2, 2), dtype=complex)
++        rho[:, 0, 0] = 1.0  # every k starts in the valence band
++    else:
++        rho = np.array(rho0, dtype=complex, copy=True)
++    current = np.zeros(time.size)
++    scale = np.array([[1.0, decay_half], [decay_half, 1.0]])
++
++    for n in range(time.size - 1):
++        hx = a_mid[n] * model.p_vc
++        kk = kx + a_mid[n]
++        hz = -0.5 * inv_2mr * kk**2 + ky_term - 0.5 * model.e_gap
++        w = np.sqrt(hz**2 + hx**2)
++        cos = np.cos(w * dt)
++        sin_over = np.sin(w * dt) / w
++        alpha = cos - 1j * sin_over * hz
++        beta = -1j * sin_over * hx
++        unitary = np.empty((n_pts, 2, 2), dtype=complex)
++        unitary[:, 0, 0] = alpha
++        unitary[:, 0, 1] = beta
++        unitary[:, 1, 0] = -np.conj(beta)
++        unitary[:, 1, 1] = np.conj(alpha)
++
++        rho *= scale  # half decay of the coherences
++        rho = unitary @ rho @ np.conj(np.transpose(unitary, (0, 2, 1)))
++        rho *= scale  # second half
++
++        kk = kx + a_next[n]
++        rho_cc = rho[:, 1, 1].real
++        rho_cv = rho[:, 1, 0].real
++        current[n + 1] = weight * (
++            np.sum(mult * rho_cc * kk) * inv_mr + 2.0 * model.p_vc * np.sum(mult * rho_cv)
++        )
++
++    current -= diamagnetic_coefficient(model) * a / C_AU
++    return current, rho
++
++
++def propagate_dephased(
++    model: TwoBandModel, time: np.ndarray, vector_potential: np.ndarray, t2: float
++) -> np.ndarray:
++    """Current J(t) of the two-band model with coherence lost at rate 1/t2 (atomic units).
++
++    ``t2 = np.inf`` gives the pure-state result of :func:`twoband.propagate`. Only a single run
++    is supported.
++    """
++    current, _ = _evolve(model, time, vector_potential, t2)
++    return current
+diff --git a/tests/test_density.py b/tests/test_density.py
+new file mode 100644
+index 0000000..cdaa295
+--- /dev/null
++++ b/tests/test_density.py
+@@ -0,0 +1,62 @@
++import numpy as np
++import pytest
++
++import twoband as tb
++from twoband.density import _evolve
++
++GAP = 4.45 / tb.HARTREE_TO_EV
++
++
++@pytest.fixture(scope="module")
++def model():
++    return tb.TwoBandModel(e_gap=GAP, m_c=0.3, m_v=0.5, p_vc=0.96, k_max=0.5, n_k=401)
++
++
++@pytest.fixture(scope="module")
++def strong_pulse():
++    # Strong enough to excite real carriers, so the coherences matter.
++    time = np.arange(0.0, 300.0, 0.05)
++    field = tb.sin4_field(time, amplitude=0.02, omega=0.2, duration=150.0, center=150.0)
++    return time, tb.vector_potential(time, field)
++
++
++def test_infinite_t2_is_the_pure_state_propagator(model, strong_pulse):
++    time, a = strong_pulse
++    pure = tb.propagate(model, time, a)
++    dephased = tb.propagate_dephased(model, time, a, np.inf)
++    np.testing.assert_allclose(dephased, pure, rtol=0, atol=1e-9 * np.abs(pure).max())
++
++
++def test_density_matrix_stays_a_valid_state(model, strong_pulse):
++    time, a = strong_pulse
++    _, rho = _evolve(model, time, a, t2=5.0)
++    trace = rho[:, 0, 0].real + rho[:, 1, 1].real
++    np.testing.assert_allclose(trace, 1.0, rtol=0, atol=1e-9)
++    np.testing.assert_allclose(rho, np.conj(np.transpose(rho, (0, 2, 1))), atol=1e-12)
++    eigenvalues = np.linalg.eigvalsh(rho)
++    assert eigenvalues.min() > -1e-9
++
++
++def test_free_coherence_decays_as_exp_t_over_t2(model):
++    # With no field the Hamiltonian is diagonal, so the energy phase does not change |rho_vc|.
++    # Only the dephasing acts, and |rho_vc| must fall as exp(-t / T2) exactly.
++    t2 = 50.0
++    time = np.arange(0.0, 200.0, 0.05)
++    rho0 = np.full((model.n_k, 2, 2), 0.5, dtype=complex)
++    _, rho = _evolve(model, time, np.zeros_like(time), t2, rho0=rho0)
++    elapsed = time[-1] - time[0]
++    np.testing.assert_allclose(np.abs(rho[:, 0, 1]), 0.5 * np.exp(-elapsed / t2), rtol=1e-9)
++    np.testing.assert_allclose(rho[:, 0, 0].real, 0.5, rtol=1e-12)
++
++
++def test_time_step_converges(model, strong_pulse):
++    time, a = strong_pulse
++    coarse = tb.propagate_dephased(model, time[::2], a[::2], 5.0)
++    fine = tb.propagate_dephased(model, time, a, 5.0)[::2]
++    np.testing.assert_allclose(coarse, fine, rtol=0, atol=1e-3 * np.abs(fine).max())
++
++
++def test_invalid_t2_raises(model, strong_pulse):
++    time, a = strong_pulse
++    with pytest.raises(ValueError, match="t2"):
++        tb.propagate_dephased(model, time, a, 0.0)
+-- 
+2.43.0
+
