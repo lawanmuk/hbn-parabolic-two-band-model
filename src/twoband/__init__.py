@@ -12,6 +12,7 @@ from twoband.conductivity import (
 )
 from twoband.constants import AU_TO_FS, C_AU, HARTREE_TO_EV
 from twoband.dataset import DatasetConfig, generate_dataset, load_or_generate
+from twoband.density import propagate_dephased
 from twoband.dielectric import im_eps_1d, im_eps_2d, im_eps_3d, re_sigma_1d_broadened
 from twoband.fourier import damped_ft
 from twoband.pulses import (
@@ -29,6 +30,7 @@ __all__ = [
     "DatasetConfig",
     "TwoBandModel",
     "conduction_band",
+    "propagate_dephased",
     "damped_ft",
     "diamagnetic_coefficient",
     "field_from_vector_potential",
