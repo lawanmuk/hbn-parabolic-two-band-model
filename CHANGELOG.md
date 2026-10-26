@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Test that the homogeneous linewidth of the dephased simulator is 1/T2: a weak probe at the gap, Fourier transformed with no damping, gives a half width within 2 % of 1/T2 for T2 = 100 and 200 a.u.
+
+### Added
 - Density-matrix propagation with dephasing (`twoband.density`, `propagate_dephased`): each k point carries a 2x2 density matrix, and the coherences decay as exp(-t / T2). With T2 = infinity the result equals the pure-state propagator to 1e-13. Tests check the trace, positivity, the exact free decay of the coherence, time-step convergence and input validation.
 
 ## [0.3.0] - 2026-10-15
